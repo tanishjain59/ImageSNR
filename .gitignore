@@ -1,0 +1,10 @@
+# Ignore data and checkpoints
+data/
+checkpoints/
+*.pth
+*.pt
+*.h5
+
+# Python cache
+__pycache__/
+*.pyc
