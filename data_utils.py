@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 import cv2
 import numpy as np
+from enhancement import ImageEnhancer
 
 class FL3DDataset(Dataset):
     def __init__(self, image_paths, labels, transform=None, enhanced=False):
@@ -12,6 +13,7 @@ class FL3DDataset(Dataset):
         self.labels = labels
         self.transform = transform
         self.enhanced = enhanced
+        self.enhancer = ImageEnhancer() if enhanced else None
         
     def __len__(self):
         return len(self.image_paths)
@@ -22,10 +24,10 @@ class FL3DDataset(Dataset):
         if image is None:
             raise ValueError(f"Could not read image at {img_path}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        
+        if self.enhanced and self.enhancer:
+            image = self.enhancer.enhance(image)
         if self.transform:
             image = self.transform(image)
-            
         label = self.labels[idx]
         return image, label
 
@@ -49,9 +51,8 @@ def process_annotations(annotations, data_dir):
         driver_state = ann.get('driver_state', None)
         if driver_state is None:
             continue
-        # You may want to filter/convert driver_state to binary (drowsy/not drowsy)
-        # For now, treat 'drowsy' as 1, everything else as 0
-        label = 1 if driver_state == 'drowsy' else 0
+        # Map driver states to binary labels: alert=0, microsleep/yawning=1
+        label = 0 if driver_state == 'alert' else 1
         image_paths.append(img_path)
         labels.append(label)
     return image_paths, labels

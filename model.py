@@ -17,8 +17,7 @@ class DrowsinessDetector(nn.Module):
             nn.Linear(num_features, 512),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(512, 1),
-            nn.Sigmoid()
+            nn.Linear(512, 1)
         )
     
     def forward(self, x):
@@ -46,7 +45,8 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         optimizer.step()
         
         total_loss += loss.item()
-        predicted = (outputs > 0.5).float()
+        probs = torch.sigmoid(outputs)
+        predicted = (probs > 0.5).float()
         total += labels.size(0)
         correct += (predicted.squeeze() == labels).sum().item()
         
@@ -77,7 +77,8 @@ def evaluate(model, dataloader, criterion, device):
             loss = criterion(outputs, labels.unsqueeze(1))
             
             total_loss += loss.item()
-            predicted = (outputs > 0.5).float()
+            probs = torch.sigmoid(outputs)
+            predicted = (probs > 0.5).float()
             total += labels.size(0)
             correct += (predicted.squeeze() == labels).sum().item()
             

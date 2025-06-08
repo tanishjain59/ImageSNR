@@ -49,6 +49,12 @@ def main(args):
     print(f"Val: {len(data_splits['val'][0])} images")
     print(f"Test: {len(data_splits['test'][0])} images")
     
+    # Calculate class weights for BCELoss
+    num_alert = data_splits['train'][1].count(0)
+    num_not_alert = data_splits['train'][1].count(1)
+    pos_weight = torch.tensor([num_alert / num_not_alert], dtype=torch.float32, device=device)
+    print(f"Class weights: pos_weight={pos_weight.item():.4f} (alert: {num_alert}, not alert: {num_not_alert})")
+    
     # Create datasets
     print("\nCreating datasets...")
     train_dataset = FL3DDataset(
@@ -66,16 +72,24 @@ def main(args):
     )
     
     # Create dataloaders with optimized settings for MPS
-    print("\nSetting up data loaders...")
-    num_workers = 2 if device.type == 'mps' else 4
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
+    if device.type == 'mps':
+        batch_size = 64
+        num_workers = 4
+        pin_memory = False
+    else:
+        batch_size = args.batch_size
+        num_workers = 4
+        pin_memory = True
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
                             shuffle=True, num_workers=num_workers,
-                            pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size,
+                            pin_memory=pin_memory)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size,
                           shuffle=False, num_workers=num_workers,
-                          pin_memory=True)
-    print(f"Batch size: {args.batch_size}")
+                          pin_memory=pin_memory)
+    print(f"Batch size: {batch_size}")
     print(f"Number of workers: {num_workers}")
+    print(f"Pin memory: {pin_memory}")
     
     # Initialize model
     print("\nInitializing model...")
@@ -85,7 +99,7 @@ def main(args):
     
     # Loss and optimizer
     print("\nSetting up loss function and optimizer...")
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=3)
     print(f"Learning rate: {args.lr}")
@@ -125,11 +139,10 @@ def main(args):
                 print(f"Learning rate adjusted: {old_lr:.6f} -> {new_lr:.6f}")
             
             # Save best model
-            if val_acc > best_val_acc:
-                best_val_acc = val_acc
-                save_path = os.path.join(args.save_dir, 'best_model.pth')
-                torch.save(model.state_dict(), save_path)
-                print(f"\nNew best model saved! (Validation Accuracy: {val_acc:.4f})")
+            model_type = "enhanced" if args.use_enhanced else "raw"
+            save_path = os.path.join(args.save_dir, f'best_model_{model_type}.pth')
+            torch.save(model.state_dict(), save_path)
+            print(f"\nNew best model saved! (Validation Accuracy: {val_acc:.4f}) at {save_path}")
             
             # Clear memory cache for MPS device
             if device.type == 'mps':
